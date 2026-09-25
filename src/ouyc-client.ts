@@ -53,7 +53,7 @@ export interface AdventureResult {
 
 export interface BedtimeStory {
   title?: string;
-  pages?: { text: string }[];
+  pages?: (string | { text: string })[];
   content?: string;
   story_text?: string;
   text?: string;

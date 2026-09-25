@@ -16,25 +16,47 @@ export function toSpeech(text: string | null | undefined): string {
     .trim();
 }
 
+/**
+ * The backend's story payload carries the body as `story_text`, with `pages`
+ * as a list of plain strings (older shapes used `{text}` objects).
+ */
 export function storyText(story: BedtimeStory): string {
+  const body = toSpeech(story.story_text ?? story.content ?? story.text ?? "");
+  if (body) return body;
   if (Array.isArray(story.pages) && story.pages.length > 0) {
     return story.pages
-      .map((p) => toSpeech(p?.text))
+      .map((p) => toSpeech(typeof p === "string" ? p : p?.text))
       .filter(Boolean)
       .join("\n\n");
   }
-  return toSpeech(story.content ?? story.story_text ?? story.text ?? "");
+  return "";
+}
+
+/** "Swim left along the trail." -> "Swim left along the trail" */
+function choiceLabel(text: string): string {
+  return toSpeech(text).replace(/[.!?\s]+$/, "");
 }
 
 export function choicesForSpeech(choices: Choice[]): string {
   if (!choices || choices.length === 0) return "";
-  const parts = choices.map((c, i) => `${numberWord(i + 1)}: ${toSpeech(c.text)}`);
+  const parts = choices.map((c, i) => `${numberWord(i + 1)}: ${choiceLabel(c.text)}`);
   return `What should happen next? ${parts.join(". ")}. You can also say something else.`;
+}
+
+/**
+ * The model sometimes appends its own "Choices: 1) ... 2) ..." block to the
+ * scene text. The app renders buttons so it never shows; for voice we would
+ * read the choices twice, so drop it and keep the structured list.
+ */
+export function sceneBody(content: string): string {
+  return toSpeech(content)
+    .replace(/\n?\s*choices?\s*:\s*(\n|\s)*1[).]\s[\s\S]*$/i, "")
+    .trim();
 }
 
 export function segmentForSpeech(segment: Segment): string {
   const head = segment.title ? `${toSpeech(segment.title)}.\n\n` : "";
-  return `${head}${toSpeech(segment.content)}\n\n${choicesForSpeech(segment.choices)}`.trim();
+  return `${head}${sceneBody(segment.content)}\n\n${choicesForSpeech(segment.choices)}`.trim();
 }
 
 export function numberWord(n: number): string {

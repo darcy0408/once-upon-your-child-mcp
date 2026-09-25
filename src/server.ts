@@ -7,7 +7,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { OuycClient, OuycError, type Choice, type Hero } from "./ouyc-client.js";
-import { choicesForSpeech, resolveChoice, segmentForSpeech, storyText, toSpeech } from "./voice.js";
+import { choicesForSpeech, resolveChoice, sceneBody, segmentForSpeech, storyText, toSpeech } from "./voice.js";
 
 /** Remember the open choices per story so "two" can be mapped to a choice id. */
 const openChoices = new Map<string, Choice[]>();
@@ -161,7 +161,7 @@ export function buildServer(client: OuycClient): McpServer {
         if (ended) openChoices.delete(story_id);
         else openChoices.set(story_id, seg.choices);
         const body = ended
-          ? `${seg.title ? toSpeech(seg.title) + ".\n\n" : ""}${toSpeech(seg.content)}\n\nThe end. Sweet dreams.`
+          ? `${seg.title ? toSpeech(seg.title) + ".\n\n" : ""}${sceneBody(seg.content)}\n\nThe end. Sweet dreams.`
           : segmentForSpeech(seg);
         const structured = {
           story_id,

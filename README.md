@@ -63,7 +63,10 @@ The server carries a bearer token for **one parent account**. It never bypasses 
 
 ## Status
 
-Scaffolded 2026-09-24. Tool surface and transport verified against the MCP SDK (protocol 2025-11-25). Live story generation to be exercised next with a consented parent token.
+- 2026-09-24: scaffolded; tool surface and transport verified against the MCP SDK (protocol 2025-11-25).
+- 2026-09-25: full loop verified live against the production backend through the MCP server: `list_heroes`, a three-scene `start_adventure` / `choose_path` run answered with "two" and "the first one", a `tell_bedtime_story`, and `narrate` returning an MP3 audio block. See `scripts/live.ts`.
+
+Demo account setup is in `scripts/setup-parent.ts` (anonymous session, adult declared age, one hero).
 
 ## License
 
