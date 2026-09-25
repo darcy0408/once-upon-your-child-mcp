@@ -235,7 +235,10 @@ export function buildServer(client: OuycClient): McpServer {
           .optional()
           .describe("What the child is feeling tonight, e.g. 'sad that grandma went home'"),
         minutes: z.number().int().min(2).max(15).optional().describe("Target length, default 5; 3 for ages 5 and under"),
-        mood: z.enum(["calming", "dreamy", "silly", "brave"]).optional().describe("Default calming"),
+        mood: z
+          .enum(["calming", "brave", "funny", "friendship", "silly", "dreamy"])
+          .optional()
+          .describe("Default calming. 'silly' means funny; 'dreamy' means calming."),
         theme: z.string().optional(),
       },
       outputSchema: {
@@ -257,7 +260,9 @@ export function buildServer(client: OuycClient): McpServer {
           theme: theme ?? "Bedtime",
           feelings_prompt: feeling,
           bedtime_duration_minutes: mins,
-          bedtime_mood: mood ?? "calming",
+          // The backend knows calming, brave, funny and friendship; anything
+          // else silently becomes calming, so map the friendly aliases.
+          bedtime_mood: mood === "silly" ? "funny" : mood === "dreamy" || !mood ? "calming" : mood,
           story_length: mins <= 3 ? "short" : mins >= 10 ? "long" : "standard",
         });
         const title = story.title ? toSpeech(story.title) : undefined;
