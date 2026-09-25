@@ -68,6 +68,7 @@ if (existing.length === 0) {
   console.log(`heroes already present: ${existing.map((h) => h.name).join(", ")}`);
 }
 
-console.log("\nPaste into .env:");
-console.log(`OUYC_TOKEN=${auth.token}`);
+console.log("\nPaste into .env (the client id is the one that matters; tokens expire):");
 console.log(`OUYC_CLIENT_ID=${auth.user_id}`);
+console.log(`OUYC_REFRESH_TOKEN=${auth.refresh_token}`);
+console.log(`OUYC_TOKEN=${auth.token}`);

@@ -8,7 +8,11 @@
 
 export interface OuycConfig {
   apiBase: string;
+  /** Access token (lives about an hour). Optional when clientId is set. */
   token?: string;
+  /** Refresh token (lives about 30 days). Used before re-minting. */
+  refreshToken?: string;
+  /** Anonymous client id: lets the server re-mint a session for the same account. */
   clientId?: string;
   defaultVoiceId?: string;
   log?: (msg: string) => void;
@@ -69,6 +73,11 @@ export class OuycError extends Error {
   ) {
     super(message);
   }
+  /** Backend error code such as QUOTA_EXCEEDED, when present. */
+  get code(): string | undefined {
+    const b = this.body as Record<string, unknown> | undefined;
+    return typeof b?.code === "string" ? b.code : undefined;
+  }
 }
 
 export class OuycClient {
@@ -78,6 +87,7 @@ export class OuycClient {
 
   constructor(private readonly cfg: OuycConfig) {
     this.token = cfg.token;
+    this.refreshToken = cfg.refreshToken;
     this.log = cfg.log ?? (() => {});
   }
 
@@ -111,8 +121,12 @@ export class OuycClient {
     return this.token;
   }
 
+  /**
+   * Access tokens live about an hour. On a 401 we try, in order: the refresh
+   * token, then re-minting the anonymous session by client id. A static token
+   * with neither of those cannot be recovered.
+   */
   private async tryRefresh(): Promise<boolean> {
-    if (this.cfg.token) return false; // static token: nothing to refresh
     if (this.refreshToken) {
       const res = await fetch(`${this.cfg.apiBase}/auth/refresh`, {
         method: "POST",
@@ -125,9 +139,12 @@ export class OuycClient {
       if (res.ok && typeof data.token === "string") {
         this.token = data.token;
         if (typeof data.refresh_token === "string") this.refreshToken = data.refresh_token;
+        this.log("access token refreshed");
         return true;
       }
+      this.log(`refresh failed (${res.status}); re-minting session`);
     }
+    if (!this.cfg.clientId) return false;
     this.token = undefined;
     this.refreshToken = undefined;
     await this.ensureToken();
@@ -198,6 +215,7 @@ export class OuycClient {
     tone?: string;
     length?: "short" | "medium" | "long";
     life_challenge?: string;
+    avoid?: string;
     big_feelings_context?: Record<string, unknown>;
   }): Promise<AdventureResult> {
     const { age, ...rest } = params;
@@ -229,16 +247,21 @@ export class OuycClient {
 
   // ── linear bedtime stories ────────────────────────────────────────────
 
+  /**
+   * Unlike the adventure route, /generate-story does not load the hero from
+   * the database: it only knows what the request carries. So we send the
+   * hero's name, details and pets ourselves, the way the app does.
+   */
   async bedtimeStory(params: {
-    character_id: string;
-    age?: number | null;
+    hero: Hero;
     theme?: string;
     feelings_prompt?: string;
     bedtime_duration_minutes?: number;
     bedtime_mood?: string;
     story_length?: string;
   }): Promise<BedtimeStory> {
-    const { age, ...rest } = params;
+    const { hero, ...rest } = params;
+    const { id, name, age, pets, ...details } = hero;
     const first = await this.request<{
       status?: string;
       story?: BedtimeStory;
@@ -246,7 +269,11 @@ export class OuycClient {
       poll_url?: string;
     }>("POST", "/generate-story", {
       ...rest,
-      ...(typeof age === "number" ? { age } : {}),
+      character_id: id,
+      character: name,
+      ...(typeof age === "number" ? { age, character_age: age } : {}),
+      character_details: { ...details, name, age, pets: pets ?? [] },
+      companion_pets: Array.isArray(pets) ? pets : [],
       bedtime_mode: true,
       include_illustrations: false,
       async_illustrations: false,

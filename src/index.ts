@@ -21,6 +21,7 @@ const API_BASE = (process.env.OUYC_API_BASE ?? "https://story-weaver-app-product
 const client = new OuycClient({
   apiBase: API_BASE,
   token: process.env.OUYC_TOKEN || undefined,
+  refreshToken: process.env.OUYC_REFRESH_TOKEN || undefined,
   clientId: process.env.OUYC_CLIENT_ID || undefined,
   defaultVoiceId: process.env.OUYC_DEFAULT_VOICE_ID || undefined,
   log: (m) => console.log(`[ouyc] ${m}`),

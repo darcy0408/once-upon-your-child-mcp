@@ -2,15 +2,33 @@
  * MCP tool surface for Once Upon YOUR Child.
  *
  * Designed for a voice agent (Alexa+): every tool returns text that can be
- * read aloud as-is, plus structured fields for agents that want them.
+ * read aloud as-is, plus structured fields for agents that want them. The
+ * phrasing adapts to the hero's age band (Sprout <=5, Explorer 6-8,
+ * Adventurer 9-12, Creator 13-14) because a four-year-old and a
+ * thirteen-year-old answer a question very differently.
  */
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { OuycClient, OuycError, type Choice, type Hero } from "./ouyc-client.js";
-import { choicesForSpeech, resolveChoice, sceneBody, segmentForSpeech, storyText, toSpeech } from "./voice.js";
+import {
+  ageBand,
+  choicesForSpeech,
+  endingLine,
+  resolveChoice,
+  sceneBody,
+  segmentForSpeech,
+  speakableError,
+  storyText,
+  toSpeech,
+} from "./voice.js";
 
-/** Remember the open choices per story so "two" can be mapped to a choice id. */
-const openChoices = new Map<string, Choice[]>();
+/** Per open story: the choices on the table plus who the story is for. */
+interface OpenStory {
+  choices: Choice[];
+  age?: number | null;
+  heroName?: string;
+}
+const openStories = new Map<string, OpenStory>();
 
 function heroSummary(h: Hero): string {
   const bits = [h.name];
@@ -22,14 +40,22 @@ function heroSummary(h: Hero): string {
   return bits.join(", ");
 }
 
-function fail(err: unknown) {
-  const msg =
-    err instanceof OuycError
-      ? `${err.message}${err.status ? ` (HTTP ${err.status})` : ""}`
-      : err instanceof Error
-        ? err.message
-        : String(err);
-  return { isError: true as const, content: [{ type: "text" as const, text: msg }] };
+/** Errors are spoken too, so keep them gentle and short. */
+function fail(err: unknown, heroName?: string) {
+  let text: string;
+  if (err instanceof OuycError) {
+    text = speakableError(err.status, err.message, heroName);
+  } else if (err instanceof Error) {
+    text = speakableError(undefined, err.message, heroName);
+  } else {
+    text = String(err);
+  }
+  return { isError: true as const, content: [{ type: "text" as const, text }] };
+}
+
+/** Younger children get a shorter path by default; the app's bands do the same. */
+function defaultLength(age: number | null | undefined): "short" | "medium" | "long" {
+  return ageBand(age) === "sprout" ? "short" : "medium";
 }
 
 const adventureOutput = {
@@ -38,11 +64,12 @@ const adventureOutput = {
   speech: z.string().describe("Read this aloud verbatim"),
   choices: z.array(z.object({ number: z.number(), id: z.string(), text: z.string() })),
   is_ending: z.boolean(),
+  hero: z.object({ name: z.string(), age: z.number().nullable().optional() }).optional(),
 };
 
 export function buildServer(client: OuycClient): McpServer {
   const server = new McpServer(
-    { name: "once-upon-your-child", version: "0.1.0" },
+    { name: "once-upon-your-child", version: "0.2.0" },
     {
       instructions: [
         "You are a warm bedtime storyteller for a child, speaking through Once Upon YOUR Child.",
@@ -50,6 +77,10 @@ export function buildServer(client: OuycClient): McpServer {
         "For a choose-your-own-path story: start_adventure, read the speech aloud, wait for the",
         "child's answer, then call choose_path with exactly what they said. Repeat until is_ending.",
         "For a wind-down story with no choices: tell_bedtime_story.",
+        "Story turns take ten to twenty seconds. Before each call say one short bridge line,",
+        "like 'Let's see what happens next' or 'Once upon a time', then read the result.",
+        "The speech is already written for the child's age: for five and under it ends with an",
+        "either-or question in the child's name, so do not add numbers or extra options.",
         "Never invent story text yourself; read what the tools return. Keep your own words short and gentle.",
       ].join(" "),
     },
@@ -90,7 +121,7 @@ export function buildServer(client: OuycClient): McpServer {
     {
       title: "Start a choose-your-own-path story",
       description:
-        "Begins an interactive Pick-a-Path story for a hero. Returns the opening scene and numbered choices to read aloud. Optional feeling (e.g. 'worried about the first day of school') steers the story toward a gentle coping arc.",
+        "Begins an interactive Pick-a-Path story for a hero. Returns the opening scene and the choices to read aloud, phrased for the hero's age. Optional feeling (e.g. 'worried about the first day of school') steers the story toward a gentle coping arc.",
       inputSchema: {
         hero: z.string().describe("Hero name or id from list_heroes"),
         theme: z.string().optional().describe("e.g. Dragons, Space, Under the sea, Forest friends"),
@@ -98,37 +129,45 @@ export function buildServer(client: OuycClient): McpServer {
           .string()
           .optional()
           .describe("What the child is feeling or facing tonight, in their words"),
-        length: z.enum(["short", "medium", "long"]).optional().describe("Default medium"),
+        length: z
+          .enum(["short", "medium", "long"])
+          .optional()
+          .describe("Default: short for ages 5 and under, otherwise medium"),
         tone: z.string().optional().describe("e.g. whimsical, calm, silly. Default whimsical"),
+        avoid: z.string().optional().describe("Things to keep out of the story, e.g. 'no monsters, no storms'"),
       },
       outputSchema: adventureOutput,
       annotations: { readOnlyHint: false, openWorldHint: true },
     },
-    async ({ hero, theme, feeling, length, tone }) => {
+    async ({ hero, theme, feeling, length, tone, avoid }) => {
+      let h: Hero | undefined;
       try {
-        const h = await client.findHero(hero);
+        h = await client.findHero(hero);
         if (!h) return fail(new Error(`I could not find a hero called "${hero}". Try list_heroes.`));
         const result = await client.startAdventure({
           character_id: h.id,
           age: h.age,
           theme: theme ?? "Adventure",
           tone: tone ?? "whimsical",
-          length: length ?? "medium",
+          length: length ?? defaultLength(h.age),
           life_challenge: feeling,
+          avoid,
         });
         const seg = result.segment;
-        openChoices.set(result.story_id, seg.choices ?? []);
-        const speech = segmentForSpeech(seg);
+        const opts = { age: h.age, heroName: h.name };
+        openStories.set(result.story_id, { choices: seg.choices ?? [], ...opts });
+        const speech = segmentForSpeech(seg, opts);
         const structured = {
           story_id: result.story_id,
           title: result.title ? toSpeech(result.title) : undefined,
           speech,
           choices: (seg.choices ?? []).map((c, i) => ({ number: i + 1, id: c.id, text: c.text })),
           is_ending: (seg.choices ?? []).length === 0,
+          hero: { name: h.name, age: h.age ?? null },
         };
         return { content: [{ type: "text", text: speech }], structuredContent: structured };
       } catch (e) {
-        return fail(e);
+        return fail(e, h?.name);
       }
     },
   );
@@ -147,32 +186,38 @@ export function buildServer(client: OuycClient): McpServer {
       annotations: { readOnlyHint: false, openWorldHint: true },
     },
     async ({ story_id, choice }) => {
+      let open = openStories.get(story_id);
       try {
-        let choices = openChoices.get(story_id);
-        if (!choices) {
+        if (!open) {
+          // Server restarted or another instance took the first turn: rebuild
+          // the open choices and the hero from the story itself.
           const full = await client.getAdventure(story_id);
           const last = full.segments?.[full.segments.length - 1];
-          choices = last?.choices ?? [];
+          const heroName = typeof full.character_name === "string" ? full.character_name : undefined;
+          const age = typeof full.age === "number" ? full.age : undefined;
+          open = { choices: last?.choices ?? [], heroName, age };
         }
-        const resolved = resolveChoice(choice, choices);
+        const resolved = resolveChoice(choice, open.choices);
         const result = await client.continueAdventure({ story_id, ...resolved });
         const seg = result.segment;
         const ended = Boolean(result.is_completed) || (seg.choices ?? []).length === 0;
-        if (ended) openChoices.delete(story_id);
-        else openChoices.set(story_id, seg.choices);
+        const opts = { age: open.age, heroName: open.heroName };
+        if (ended) openStories.delete(story_id);
+        else openStories.set(story_id, { ...open, choices: seg.choices });
         const body = ended
-          ? `${seg.title ? toSpeech(seg.title) + ".\n\n" : ""}${sceneBody(seg.content)}\n\nThe end. Sweet dreams.`
-          : segmentForSpeech(seg);
+          ? `${seg.title ? toSpeech(seg.title) + ".\n\n" : ""}${sceneBody(seg.content)}\n\n${endingLine(opts)}`
+          : segmentForSpeech(seg, opts);
         const structured = {
           story_id,
           title: seg.title ? toSpeech(seg.title) : undefined,
           speech: body,
           choices: ended ? [] : seg.choices.map((c, i) => ({ number: i + 1, id: c.id, text: c.text })),
           is_ending: ended,
+          hero: open.heroName ? { name: open.heroName, age: open.age ?? null } : undefined,
         };
         return { content: [{ type: "text", text: body }], structuredContent: structured };
       } catch (e) {
-        return fail(e);
+        return fail(e, open?.heroName);
       }
     },
   );
@@ -182,14 +227,14 @@ export function buildServer(client: OuycClient): McpServer {
     {
       title: "Tell a calming bedtime story",
       description:
-        "Generates a complete wind-down story for a hero, sized to a number of minutes, with a feelings theme if given. No choices; read it straight through, slowly.",
+        "Generates a complete wind-down story for a hero, sized to a number of minutes. No choices; read it straight through, slowly. The hero's buddies come along; a feeling, if given, is passed to the app.",
       inputSchema: {
         hero: z.string().describe("Hero name or id from list_heroes"),
         feeling: z
           .string()
           .optional()
           .describe("What the child is feeling tonight, e.g. 'sad that grandma went home'"),
-        minutes: z.number().int().min(2).max(15).optional().describe("Target length, default 5"),
+        minutes: z.number().int().min(2).max(15).optional().describe("Target length, default 5; 3 for ages 5 and under"),
         mood: z.enum(["calming", "dreamy", "silly", "brave"]).optional().describe("Default calming"),
         theme: z.string().optional(),
       },
@@ -197,34 +242,37 @@ export function buildServer(client: OuycClient): McpServer {
         title: z.string().optional(),
         speech: z.string().describe("Read this aloud verbatim"),
         wisdom_gem: z.string().optional(),
+        minutes: z.number().describe("Approximate read-aloud minutes"),
       },
       annotations: { readOnlyHint: false, openWorldHint: true },
     },
     async ({ hero, feeling, minutes, mood, theme }) => {
+      let h: Hero | undefined;
       try {
-        const h = await client.findHero(hero);
+        h = await client.findHero(hero);
         if (!h) return fail(new Error(`I could not find a hero called "${hero}". Try list_heroes.`));
+        const mins = minutes ?? (ageBand(h.age) === "sprout" ? 3 : 5);
         const story = await client.bedtimeStory({
-          character_id: h.id,
-          age: h.age,
+          hero: h,
           theme: theme ?? "Bedtime",
           feelings_prompt: feeling,
-          bedtime_duration_minutes: minutes ?? 5,
+          bedtime_duration_minutes: mins,
           bedtime_mood: mood ?? "calming",
-          story_length: (minutes ?? 5) <= 3 ? "short" : (minutes ?? 5) >= 10 ? "long" : "standard",
+          story_length: mins <= 3 ? "short" : mins >= 10 ? "long" : "standard",
         });
         const title = story.title ? toSpeech(story.title) : undefined;
         const text = storyText(story);
         const gem = story.wisdom_gem ? toSpeech(story.wisdom_gem) : undefined;
-        const speech = [title ? `${title}.` : "", text, gem ? `Tonight's wisdom gem: ${gem}` : ""]
+        const speech = [title ? `${title}.` : "", text, gem ? `Tonight's wisdom gem: ${gem}` : "", endingLine({ age: h.age, heroName: h.name })]
           .filter(Boolean)
           .join("\n\n");
+        const words = text.split(/\s+/).filter(Boolean).length;
         return {
           content: [{ type: "text", text: speech }],
-          structuredContent: { title, speech, wisdom_gem: gem },
+          structuredContent: { title, speech, wisdom_gem: gem, minutes: Math.round((words / 130) * 10) / 10 },
         };
       } catch (e) {
-        return fail(e);
+        return fail(e, h?.name);
       }
     },
   );
@@ -291,7 +339,7 @@ export function buildServer(client: OuycClient): McpServer {
             type: "text",
             text: `It's bedtime. Start a gentle choose-your-own-path story for ${hero}${
               feeling ? ` who is feeling ${feeling}` : ""
-            }. Read each scene slowly, then ask me which path to take. ${choicesForSpeech([])}`.trim(),
+            }. Read each scene slowly, then ask me which path to take.`,
           },
         },
       ],
