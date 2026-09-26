@@ -71,7 +71,7 @@ The server carries a bearer token for **one parent account**. It never bypasses 
 - Age calibration is enforced server-side from the hero's verified age.
 - Free-text choices ("something else") are wrapped as story input, never as instructions.
 - Voice-only mode: `include_images: false`, so no illustration is generated that nobody will see.
-- Bedtime (linear) stories count against the account's quota (free tier: 3 a day, 5 a month). Adventures do not.
+- Bedtime (linear) stories count against the account's quota (free tier: 3 a day, 5 a month). Adventures may count too; check the app's current quota rules.
 
 ## Safety notes for a kids' voice experience
 
