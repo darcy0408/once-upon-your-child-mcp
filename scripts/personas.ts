@@ -15,8 +15,22 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 
 const API = (process.env.OUYC_API_BASE ?? "https://story-weaver-app-production.up.railway.app").replace(/\/+$/, "");
-const TOKEN = process.env.OUYC_TOKEN;
-if (!TOKEN) throw new Error("OUYC_TOKEN missing in .env");
+// Access tokens live an hour, so sign in fresh by client id when we can.
+async function freshToken(): Promise<string> {
+  const clientId = process.env.OUYC_CLIENT_ID;
+  if (clientId) {
+    const res = await fetch(`${API}/auth/anonymous`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ client_id: clientId }),
+    });
+    const data = (await res.json().catch(() => ({}))) as { token?: string };
+    if (res.ok && data.token) return data.token;
+  }
+  if (process.env.OUYC_TOKEN) return process.env.OUYC_TOKEN;
+  throw new Error("Set OUYC_CLIENT_ID (or OUYC_TOKEN) in .env");
+}
+const TOKEN = await freshToken();
 const url = new URL(process.env.MCP_URL ?? `http://127.0.0.1:${process.env.PORT ?? 3333}/mcp`);
 
 type Persona = {
