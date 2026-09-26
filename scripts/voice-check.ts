@@ -4,7 +4,7 @@
  *
  *   npx tsx scripts/voice-check.ts
  */
-import { choicesForSpeech, endingLine, resolveChoice, sceneBody, shortLabel } from "../src/voice.js";
+import { choicesForSpeech, endingLine, resolveChoice, sceneBody, shortLabel, toSpeech } from "../src/voice.js";
 
 let failures = 0;
 function expect(name: string, got: unknown, want: unknown) {
@@ -145,6 +145,8 @@ expect(
   "Pip snuffles the egg. Pip barks a bright tune. Pip nudges your hand.",
 );
 expect("keep real parentheticals", sceneBody("The map (the one from Grandma) glows."), "The map (the one from Grandma) glows.");
+// Bedtime stories gloss new words in parentheses on purpose.
+expect("keep vocabulary glosses", toSpeech("The pebble was luminescent (glowing), soft (velvety)."), "The pebble was luminescent (glowing), soft (velvety).");
 
 console.log(failures ? `\n${failures} failing` : "\nall passed");
 process.exit(failures ? 1 : 0);

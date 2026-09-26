@@ -32,7 +32,9 @@ export function toSpeech(text: string | null | undefined): string {
     .replace(/<[^>]+>/g, "")
     // Stage directions the model sometimes leaves in: "Pip snuffles the egg
     // (action). Pip barks a tune (dialogue)." A narrator must not read them.
-    .replace(/\s*\([a-z]{2,12}\)/g, "")
+    // Only these words: bedtime stories gloss vocabulary in parentheses on
+    // purpose ("luminescent (gently glowing)") and that must stay.
+    .replace(/\s*\((?:action|dialogue|bond|help|emotion|comfort|humou?r|reaction|gesture)\)/gi, "")
     .replace(/[ \t]+/g, " ")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
