@@ -138,5 +138,13 @@ expect(
   "custom",
 );
 
+// Stage-direction labels seen live on 2026-09-26 in a Pick-a-Path scene.
+expect(
+  "strip '(action)' style stage directions",
+  sceneBody("Pip snuffles the egg (action). Pip barks a bright tune (dialogue). Pip nudges your hand (bond)."),
+  "Pip snuffles the egg. Pip barks a bright tune. Pip nudges your hand.",
+);
+expect("keep real parentheticals", sceneBody("The map (the one from Grandma) glows."), "The map (the one from Grandma) glows.");
+
 console.log(failures ? `\n${failures} failing` : "\nall passed");
 process.exit(failures ? 1 : 0);

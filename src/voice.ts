@@ -30,6 +30,9 @@ export function toSpeech(text: string | null | undefined): string {
     .replace(/[*_#>`~]/g, "")
     .replace(/\[(.*?)\]\(.*?\)/g, "$1")
     .replace(/<[^>]+>/g, "")
+    // Stage directions the model sometimes leaves in: "Pip snuffles the egg
+    // (action). Pip barks a tune (dialogue)." A narrator must not read them.
+    .replace(/\s*\([a-z]{2,12}\)/g, "")
     .replace(/[ \t]+/g, " ")
     .replace(/\n{3,}/g, "\n\n")
     .trim();

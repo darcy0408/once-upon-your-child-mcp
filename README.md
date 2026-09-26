@@ -52,6 +52,12 @@ npx tsx scripts/personas.ts       # live: one hero per age band through the serv
 
 Production: `npm run build && npm start`. Railway and similar hosts set `PORT`.
 
+### The simulated Alexa+ page
+
+With the server running, open `http://localhost:3333/` (served from `web/index.html`, one static file, no build). It is a browser-side MCP client: it sends `initialize`, `tools/list` and `tools/call` to the same `POST /mcp` a voice host would, and plays the part of Alexa+ with a small rule-based router (who the hero is, adventure or bedtime, theme, feeling). It asks once for the demo key (`MCP_SHARED_SECRET`; leave blank if the server has none) and keeps it in `sessionStorage`.
+
+Voice in uses the Web Speech API, so speech recognition needs Chrome or Edge on `https://` or `localhost`; the text box always works. Voice out uses the `narrate` tool (the app's storyteller voices, MP3) with the browser's own voice as a fallback and a checkbox to prefer it. Every MCP call shows up in the transcript with its timing so a judge can see the protocol at work.
+
 Locking the endpoint: set `MCP_SHARED_SECRET` and every `POST /mcp` must carry `Authorization: Bearer <that secret>`; anything else gets a 401. It is optional on your own machine, but the server refuses to start without it on Railway (or with `NODE_ENV=production`), because whoever reaches an open endpoint becomes the demo parent. The check scripts read the same variable from `.env` and send the header themselves. `GET /healthz` stays public.
 
 Auth to the app: backend access tokens live about an hour, so the server keeps itself signed in with the refresh token and, failing that, re-mints the anonymous session by `OUYC_CLIENT_ID`. Set the client id and the server survives restarts and token expiry on its own.

@@ -1,0 +1,653 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Alexa+ storytime (simulated)</title>
+<meta name="description" content="A browser-side MCP client that plays the part of Alexa+ and drives the Once Upon YOUR Child MCP server by voice.">
+<style>
+  /* Tokens: light/dark pairs with a media-query fallback, light-dark() where supported. */
+  :root {
+    color-scheme: light dark;
+    --bg-l: #f6f1e8;      --bg-d: #0e1124;
+    --panel-l: #fffdf8;   --panel-d: #171b37;
+    --ink-l: #24213a;     --ink-d: #ebe9f7;
+    --muted-l: #6a6684;   --muted-d: #a09db9;
+    --line-l: #e4ddd0;    --line-d: #2b3058;
+    --accent-l: #2f55d4;  --accent-d: #8fa8ff;
+    --on-accent-l: #fff;  --on-accent-d: #0e1124;
+    --child-l: #ffe7b3;   --child-d: #3d3467;
+    --warn-l: #a13b1e;    --warn-d: #ffb59a;
+
+    --bg: var(--bg-l); --panel: var(--panel-l); --ink: var(--ink-l); --muted: var(--muted-l);
+    --line: var(--line-l); --accent: var(--accent-l); --on-accent: var(--on-accent-l);
+    --child: var(--child-l); --warn: var(--warn-l);
+    @media (prefers-color-scheme: dark) {
+      --bg: var(--bg-d); --panel: var(--panel-d); --ink: var(--ink-d); --muted: var(--muted-d);
+      --line: var(--line-d); --accent: var(--accent-d); --on-accent: var(--on-accent-d);
+      --child: var(--child-d); --warn: var(--warn-d);
+    }
+    @supports (color: light-dark(white, black)) {
+      --bg: light-dark(var(--bg-l), var(--bg-d));
+      --panel: light-dark(var(--panel-l), var(--panel-d));
+      --ink: light-dark(var(--ink-l), var(--ink-d));
+      --muted: light-dark(var(--muted-l), var(--muted-d));
+      --line: light-dark(var(--line-l), var(--line-d));
+      --accent: light-dark(var(--accent-l), var(--accent-d));
+      --on-accent: light-dark(var(--on-accent-l), var(--on-accent-d));
+      --child: light-dark(var(--child-l), var(--child-d));
+      --warn: light-dark(var(--warn-l), var(--warn-d));
+    }
+    accent-color: var(--accent);
+  }
+
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body {
+    margin: 0;
+    height: 100dvh;
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+    font: 1rem/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+  }
+  :focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+  button { font: inherit; color: inherit; cursor: pointer; }
+
+  .wrap { inline-size: min(100%, 44rem); margin-inline: auto; padding-inline: 1rem; }
+
+  header {
+    border-block-end: 1px solid var(--line);
+    background: var(--panel);
+  }
+  header .wrap { display: flex; align-items: center; gap: .75rem; padding-block: .6rem; }
+  .ring {
+    inline-size: 1.5rem; block-size: 1.5rem; border-radius: 50%; flex: none;
+    border: .3rem solid var(--accent);
+    box-shadow: 0 0 0 .15rem color-mix(in oklab, var(--accent) 25%, transparent);
+  }
+  h1 { font-size: clamp(1.05rem, .9rem + .6vw, 1.25rem); margin: 0; line-height: 1.2; }
+  .sub { font-size: .8rem; color: var(--muted); margin: 0; }
+  .status {
+    margin-inline-start: auto; font-size: .8rem; color: var(--muted);
+    padding: .2rem .6rem; border: 1px solid var(--line); border-radius: 999px; white-space: nowrap;
+  }
+  .status[data-state="listening"] { color: var(--accent); border-color: var(--accent); }
+  .status[data-state="speaking"]  { color: var(--ink); border-color: var(--ink); }
+
+  main { overflow-y: auto; scrollbar-gutter: stable; }
+  main .wrap { padding-block: 1rem; display: flex; flex-direction: column; gap: .75rem; }
+
+  .turn { max-inline-size: 90%; border-radius: 1.1rem; padding: .7rem .95rem; white-space: pre-line; }
+  .turn.alexa { align-self: flex-start; background: var(--panel); border: 1px solid var(--line); border-start-start-radius: .3rem; }
+  .turn.child { align-self: flex-end; background: var(--child); border-start-end-radius: .3rem; }
+  .turn.alexa .who, .turn.child .who { display: block; font-size: .72rem; color: var(--muted); margin-block-end: .15rem; }
+  .turn.tool {
+    align-self: center; max-inline-size: 100%; font-size: .78rem; color: var(--muted);
+    font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; padding: .2rem .6rem; white-space: normal;
+  }
+  .turn.tool.error { color: var(--warn); }
+  .turn details { font-family: inherit; }
+  .turn summary { cursor: pointer; }
+
+  .choices { display: flex; flex-wrap: wrap; gap: .5rem; align-self: flex-start; }
+  .chip {
+    border: 1px solid var(--line); background: var(--panel); border-radius: 999px;
+    padding: .35rem .8rem; min-block-size: 2rem; text-align: start;
+  }
+  .chip[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+
+  footer { border-block-start: 1px solid var(--line); background: var(--panel); }
+  footer .wrap { padding-block: .75rem; display: grid; gap: .6rem; }
+  .row { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
+  .row-label { font-size: .78rem; color: var(--muted); }
+
+  .talk { display: grid; grid-template-columns: auto 1fr; gap: .9rem; align-items: center; }
+  .mic-block { display: grid; justify-items: center; gap: .25rem; }
+  .mic {
+    inline-size: 4.5rem; block-size: 4.5rem; border-radius: 50%; border: 0;
+    background: var(--accent); color: var(--on-accent);
+    display: grid; place-items: center; position: relative;
+  }
+  .mic svg { inline-size: 2rem; block-size: 2rem; }
+  .mic[aria-pressed="true"]::after {
+    content: ""; position: absolute; inset: -.45rem; border-radius: 50%;
+    border: .2rem solid var(--accent); opacity: .7;
+  }
+  .mic[disabled] { opacity: .45; cursor: not-allowed; }
+  .mic-label { font-size: .78rem; color: var(--muted); text-align: center; }
+  @media (prefers-reduced-motion: no-preference) {
+    .mic[aria-pressed="true"]::after { animation: pulse 1.4s ease-out infinite; }
+    @keyframes pulse { from { transform: scale(.85); opacity: .8; } to { transform: scale(1.25); opacity: 0; } }
+  }
+
+  form.text { display: flex; gap: .5rem; }
+  form.text label { position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip-path: inset(50%); }
+  input[type="text"], input[type="password"] {
+    font: inherit; flex: 1; min-inline-size: 0; padding: .6rem .8rem; border-radius: .7rem;
+    border: 1px solid var(--line); background: var(--bg); color: var(--ink);
+  }
+  .btn { border: 1px solid var(--line); background: var(--bg); border-radius: .7rem; padding: .55rem .9rem; min-block-size: 2.5rem; }
+  .btn.primary { background: var(--accent); color: var(--on-accent); border-color: transparent; }
+  .hint { font-size: .85rem; color: var(--muted); min-block-size: 1.3rem; }
+  .alert { color: var(--warn); font-size: .85rem; }
+  .alert:empty { display: none; }
+  .small { font-size: .78rem; color: var(--muted); display: flex; gap: .4rem; align-items: center; }
+  .linklike { background: none; border: 0; padding: 0; color: var(--accent); text-decoration: underline; font-size: .78rem; }
+
+  dialog {
+    inline-size: min(92vw, 26rem); border: 1px solid var(--line); border-radius: 1rem;
+    background: var(--panel); color: var(--ink); padding: 1.25rem;
+  }
+  dialog::backdrop { background: rgb(0 0 0 / .45); }
+  dialog h2 { margin: 0 0 .5rem; font-size: 1.1rem; }
+  dialog p { margin: 0 0 .75rem; font-size: .9rem; color: var(--muted); }
+  dialog label { display: block; font-size: .85rem; margin-block-end: .3rem; }
+  dialog input { inline-size: 100%; }
+  dialog .row { justify-content: flex-end; margin-block-start: .9rem; }
+
+  @media (max-width: 30rem) {
+    .turn { max-inline-size: 96%; }
+    .status { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <div class="ring" aria-hidden="true"></div>
+    <div>
+      <h1>Alexa+ storytime</h1>
+      <p class="sub">Simulated. A browser MCP client driving Once Upon YOUR Child.</p>
+    </div>
+    <span class="status" id="status" data-state="idle" aria-live="polite">Not connected</span>
+  </div>
+</header>
+
+<main aria-label="Conversation">
+  <div class="wrap" id="transcript"></div>
+</main>
+
+<footer>
+  <div class="wrap">
+    <div class="row" id="heroes" hidden>
+      <span class="row-label">Heroes:</span>
+    </div>
+    <div class="row" id="examples" hidden>
+      <span class="row-label">Try saying:</span>
+    </div>
+    <div class="talk">
+      <div class="mic-block">
+        <button class="mic" id="mic" type="button" aria-pressed="false" aria-labelledby="mic-label" disabled>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="9" y="3" width="6" height="11" rx="3"></rect>
+            <path d="M5 11a7 7 0 0 0 14 0M12 18v3M8 21h8"></path>
+          </svg>
+        </button>
+        <span class="mic-label" id="mic-label">Tap to talk</span>
+      </div>
+      <div>
+        <form class="text" id="text-form">
+          <label for="text-input">Type what the child would say</label>
+          <input type="text" id="text-input" autocomplete="off" placeholder="or type it here" disabled>
+          <button class="btn" type="submit" id="send" disabled>Send</button>
+        </form>
+        <p class="hint" id="hint"></p>
+        <p class="alert" id="alert" role="alert"></p>
+      </div>
+    </div>
+    <div class="small">
+      <input type="checkbox" id="browser-voice">
+      <label for="browser-voice">Use the browser's voice instead of the app's narrator (faster, no MP3 calls)</label>
+      <button class="linklike" type="button" id="change-key" style="margin-inline-start:auto">Change demo key</button>
+    </div>
+  </div>
+</footer>
+
+<dialog id="key-dialog" aria-labelledby="key-title">
+  <form method="dialog" id="key-form">
+    <h2 id="key-title">Demo key</h2>
+    <p id="key-help">This page talks to the MCP server at <code>/mcp</code>, which asks for the shared secret it was started with. Leave it blank if the server is running without one.</p>
+    <label for="key-input">Shared secret (MCP_SHARED_SECRET)</label>
+    <input type="password" id="key-input" autocomplete="off" aria-describedby="key-help">
+    <p class="alert" id="key-error" role="alert"></p>
+    <div class="row">
+      <button class="btn primary" type="submit">Connect</button>
+    </div>
+  </form>
+</dialog>
+
+<script type="module">
+/* ---------- elements & state ---------- */
+const $ = (id) => document.getElementById(id);
+const els = {
+  transcript: $("transcript"), status: $("status"), hint: $("hint"), alert: $("alert"),
+  mic: $("mic"), micLabel: $("mic-label"), form: $("text-form"), input: $("text-input"), send: $("send"),
+  heroes: $("heroes"), examples: $("examples"), browserVoice: $("browser-voice"),
+  keyDialog: $("key-dialog"), keyForm: $("key-form"), keyInput: $("key-input"), keyError: $("key-error"),
+  changeKey: $("change-key"),
+};
+const KEY_STORE = "ouyc-mcp-demo-key";
+const PROTOCOL = "2025-11-25";
+
+const state = {
+  key: null,
+  heroes: [],          // { name, age, id }
+  hero: null,          // currently selected hero
+  storyId: null,       // open Pick-a-Path story
+  choices: [],         // { number, id, text } for the open story
+  speaking: null,      // cancellation token for whatever is being spoken
+  recognizer: null,
+};
+
+/* ---------- small UI helpers ---------- */
+function setStatus(text, kind = "idle") { els.status.textContent = text; els.status.dataset.state = kind; }
+function setHint(text) { els.hint.textContent = text; }
+function setAlert(text) { els.alert.textContent = text; }
+function setBusy(busy) {
+  els.input.disabled = busy; els.send.disabled = busy; els.mic.disabled = busy || !Recognition;
+}
+function scrollDown() { els.transcript.parentElement.scrollTop = els.transcript.parentElement.scrollHeight; }
+
+function addTurn(role, text, opts = {}) {
+  const div = document.createElement("div");
+  div.className = `turn ${role}${opts.error ? " error" : ""}`;
+  if (role === "alexa" || role === "child") {
+    const who = document.createElement("span");
+    who.className = "who";
+    who.textContent = role === "alexa" ? "Alexa+" : (state.hero?.name ?? "Child");
+    div.append(who);
+  }
+  div.append(document.createTextNode(text));
+  els.transcript.append(div);
+  scrollDown();
+  return div;
+}
+
+function addChoices(choices) {
+  clearChoices();
+  if (!choices.length) return;
+  const row = document.createElement("div");
+  row.className = "choices"; row.id = "choice-row";
+  for (const c of choices) {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "chip";
+    b.textContent = `${c.number}. ${c.text}`;
+    b.addEventListener("click", () => handleUtterance(String(c.number)));
+    row.append(b);
+  }
+  els.transcript.append(row);
+  scrollDown();
+}
+function clearChoices() { $("choice-row")?.remove(); }
+
+function idleHint() {
+  if (state.storyId) return "Answer with a number, the words of a path, or your own idea.";
+  const h = state.hero?.name ?? state.heroes[0]?.name;
+  return h ? `Try: “Tell ${h} a story about dragons” or “${h} is worried about school, can we have a bedtime story?”` : "";
+}
+
+/* ---------- key storage ---------- */
+function loadKey() { try { return sessionStorage.getItem(KEY_STORE); } catch { return null; } }
+function saveKey(k) { try { sessionStorage.setItem(KEY_STORE, k); } catch { /* private window etc. */ } }
+function askForKey(message = "") {
+  els.keyError.textContent = message;
+  els.keyInput.value = state.key ?? "";
+  if (!els.keyDialog.open) els.keyDialog.showModal();
+}
+
+/* ---------- MCP over Streamable HTTP ---------- */
+class KeyError extends Error {}
+let rpcId = 0;
+
+function headers() {
+  const h = { "content-type": "application/json", accept: "application/json, text/event-stream", "mcp-protocol-version": PROTOCOL };
+  if (state.key) h.authorization = `Bearer ${state.key}`;
+  return h;
+}
+
+/** One JSON-RPC request. The server answers as JSON or as an SSE body; both are handled. */
+async function rpc(method, params = {}) {
+  const id = ++rpcId;
+  const res = await fetch("/mcp", { method: "POST", headers: headers(), body: JSON.stringify({ jsonrpc: "2.0", id, method, params }) });
+  if (res.status === 401) throw new KeyError("The server did not accept that key.");
+  const text = await res.text();
+  let msg;
+  if ((res.headers.get("content-type") ?? "").includes("text/event-stream")) {
+    for (const line of text.split("\n")) {
+      if (!line.startsWith("data:")) continue;
+      const m = JSON.parse(line.slice(5));
+      if (m.id === id) msg = m;
+    }
+  } else if (text) {
+    msg = JSON.parse(text);
+  }
+  if (!msg) throw new Error(`The server answered HTTP ${res.status} with no result.`);
+  if (msg.error) throw new Error(msg.error.message);
+  return msg.result;
+}
+
+async function notify(method) {
+  await fetch("/mcp", { method: "POST", headers: headers(), body: JSON.stringify({ jsonrpc: "2.0", method }) });
+}
+
+/** tools/call, logged into the transcript unless quiet (narration chunks are). */
+async function callTool(name, args, { quiet = false } = {}) {
+  const shown = Object.entries(args).filter(([, v]) => v !== undefined).map(([k, v]) => `${k}: ${JSON.stringify(v)}`).join(", ");
+  const line = quiet ? null : addTurn("tool", `→ ${name}(${shown})`);
+  const t0 = performance.now();
+  const r = await rpc("tools/call", { name, arguments: args });
+  const secs = ((performance.now() - t0) / 1000).toFixed(1);
+  if (line) line.textContent += ` · ${secs}s${r.isError ? " · error" : ""}`;
+  if (line && r.isError) line.classList.add("error");
+  return r;
+}
+const textOf = (r) => r.content?.filter((c) => c.type === "text").map((c) => c.text).join("\n") ?? "";
+
+/* ---------- speech out ---------- */
+const CHUNK = 5500; // narrate accepts up to 6000 characters
+function chunk(text, max = CHUNK) {
+  const out = [];
+  let cur = "";
+  for (const para of text.split(/\n{2,}/)) {
+    if ((cur + "\n\n" + para).length > max && cur) { out.push(cur); cur = para; }
+    else cur = cur ? `${cur}\n\n${para}` : para;
+  }
+  if (cur) out.push(cur);
+  return out;
+}
+
+function stopSpeaking() {
+  if (state.speaking) { state.speaking.cancelled = true; state.speaking.audio?.pause(); state.speaking = null; }
+  if ("speechSynthesis" in window) speechSynthesis.cancel();
+}
+
+function speakBrowser(text, token) {
+  if (!("speechSynthesis" in window)) return Promise.resolve();
+  // Long utterances get cut off in some browsers, so speak a paragraph at a time.
+  const parts = text.split(/\n{2,}/).flatMap((p) => p.match(/[^.!?]+[.!?]+["”']?|[^.!?]+$/g) ?? [p]);
+  return new Promise((resolve) => {
+    let i = 0;
+    const next = () => {
+      if (token.cancelled || i >= parts.length) return resolve();
+      const u = new SpeechSynthesisUtterance(parts[i++].trim());
+      u.rate = 0.95;
+      u.onend = next; u.onerror = next;
+      speechSynthesis.speak(u);
+    };
+    next();
+  });
+}
+
+function playBase64(data, token) {
+  return new Promise((resolve, reject) => {
+    if (token.cancelled) return resolve();
+    const audio = new Audio(`data:audio/mpeg;base64,${data}`);
+    token.audio = audio;
+    audio.onended = resolve;
+    audio.onerror = () => reject(new Error("audio playback failed"));
+    audio.play().catch(reject);
+  });
+}
+
+/** App narrator: fetch chunk n+1 while chunk n plays. Falls back to the browser voice. */
+async function speakNarrated(text, token) {
+  const parts = chunk(text);
+  const fetchPart = (p) => callTool("narrate", { text: p }, { quiet: true }).then((r) => {
+    if (r.isError) throw new Error(textOf(r));
+    const a = r.content.find((c) => c.type === "audio");
+    if (!a) throw new Error("no audio in narrate result");
+    return a.data;
+  });
+  let pending = fetchPart(parts[0]);
+  for (let i = 0; i < parts.length; i++) {
+    let data;
+    try { data = await pending; } catch (e) {
+      addTurn("tool", `narrate failed (${e.message}); using the browser voice`, { error: true });
+      return speakBrowser(parts.slice(i).join("\n\n"), token);
+    }
+    if (token.cancelled) return;
+    pending = i + 1 < parts.length ? fetchPart(parts[i + 1]) : null;
+    try { await playBase64(data, token); } catch { return speakBrowser(parts.slice(i).join("\n\n"), token); }
+  }
+}
+
+/** Speak a reply. The bridge line (browser voice) covers the wait while `work` runs. */
+async function speak(text, token, { narrate = true } = {}) {
+  setStatus("Speaking", "speaking"); els.micLabel.textContent = "Tap to interrupt";
+  if (narrate && !els.browserVoice.checked) await speakNarrated(text, token);
+  else await speakBrowser(text, token);
+}
+
+function newToken() { stopSpeaking(); const t = { cancelled: false }; state.speaking = t; return t; }
+function finishSpeaking(token) {
+  if (state.speaking === token) state.speaking = null;
+  if (!token.cancelled) { setStatus("Ready", "idle"); els.micLabel.textContent = "Tap to talk"; setHint(idleHint()); }
+}
+
+/* ---------- speech in ---------- */
+const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+function startListening() {
+  stopSpeaking();
+  const rec = new Recognition();
+  rec.lang = "en-US"; rec.interimResults = true; rec.maxAlternatives = 1;
+  state.recognizer = rec;
+  els.mic.setAttribute("aria-pressed", "true");
+  els.micLabel.textContent = "Listening… tap to stop";
+  setStatus("Listening", "listening"); setAlert(""); setHint("");
+  let finalText = "";
+  rec.onresult = (ev) => {
+    let interim = "";
+    for (const r of ev.results) (r.isFinal ? (finalText += r[0].transcript) : (interim += r[0].transcript));
+    setHint(`“${finalText || interim}”`);
+  };
+  rec.onerror = (ev) => {
+    const why = { "not-allowed": "The microphone is blocked for this page. Use the text box instead.",
+                  "no-speech": "I didn't catch anything.",
+                  "network": "Speech recognition needs a network connection in this browser.",
+                  "audio-capture": "No microphone was found." }[ev.error] ?? `Speech recognition error: ${ev.error}`;
+    setAlert(why);
+  };
+  rec.onend = () => {
+    state.recognizer = null;
+    els.mic.setAttribute("aria-pressed", "false");
+    els.micLabel.textContent = "Tap to talk";
+    setStatus("Ready", "idle");
+    if (finalText.trim()) handleUtterance(finalText.trim());
+    else setHint(idleHint());
+  };
+  rec.start();
+}
+function stopListening() { state.recognizer?.stop(); }
+
+/* ---------- the "Alexa+" part: pick a tool for what the child said ---------- */
+const FEELING_WORDS = "worried|scared|nervous|sad|excited|angry|mad|upset|shy|grumpy|frustrated|anxious|lonely|missing|afraid|tired|happy|sick";
+function parseRequest(u) {
+  const lower = u.toLowerCase();
+  const hero = state.heroes.find((h) => new RegExp(`\\b${h.name.toLowerCase()}\\b`).test(lower)) ?? state.hero;
+  const themeM = /\b(?:about|with)\s+(.+?)(?=\s+(?:and|because|who|that|tonight|please)\b|[.,!?]|$)/i.exec(u);
+  const feelM = /\b(?:feeling|feels|felt)\s+([^.,!?]+)/i.exec(u)
+    ?? new RegExp(`\\b(?:is|'s|'re|are|i'm|i am|am)\\s+((?:a (?:bit|little) )?(?:${FEELING_WORDS})[^.,!?]*)`, "i").exec(u);
+  const bedtime = /\bbedtime\b|\bwind[- ]?down\b|\bcalm(?:ing)?\b|\bsleep|\bgo to bed\b|\bgoodnight story\b/.test(lower);
+  const mood = /funny|silly|giggl/.test(lower) ? "funny" : /\bbrave\b/.test(lower) ? "brave" : /friend/.test(lower) ? "friendship" : undefined;
+  const clean = (s) => s?.trim().replace(/^(?:the|a|an)\s+/i, "").replace(/\s+story$/i, "");
+  return { hero, theme: clean(themeM?.[1]), feeling: feelM?.[1]?.trim(), bedtime, mood };
+}
+
+const BRIDGES = ["Let's see what happens next.", "Ooh, good choice.", "Here we go.", "And then…"];
+const pick = (a) => a[Math.floor(Math.random() * a.length)];
+
+async function handleUtterance(text) {
+  if (!text) return;
+  // Work out who is speaking before the bubble is labelled.
+  const q = state.storyId ? null : parseRequest(text);
+  if (q?.hero) selectHero(q.hero);
+  addTurn("child", text);
+  els.input.value = "";
+  clearChoices();
+  setAlert("");
+  const lower = text.toLowerCase();
+
+  // Local, no tool needed.
+  if (/^(stop|that's all|the end|goodnight|good night|enough for tonight)\b/.test(lower)) {
+    state.storyId = null; state.choices = [];
+    return reply(`Goodnight${state.hero ? ", " + state.hero.name : ""}. Sleep well.`, { narrate: false });
+  }
+
+  setBusy(true);
+  const token = newToken();
+  try {
+    if (state.storyId) {
+      await respond(token, pick(BRIDGES), () => callTool("choose_path", { story_id: state.storyId, choice: text }), onAdventure);
+    } else if (/\bheroes?\b|\bwho can\b|\bwhich (?:hero|kid|child)/.test(lower)) {
+      await respond(token, "Let me check.", () => callTool("list_heroes", {}), (r) => {
+        const names = state.heroes.map((h) => h.name);
+        return { text: names.length ? `I can tell a story for ${listOf(names)}. Who is it tonight?` : textOf(r), narrate: false };
+      });
+    } else {
+      if (!q.hero) {
+        const names = state.heroes.map((h) => h.name);
+        await replyWith(token, names.length ? `Which hero should it be? I know ${listOf(names)}.` : "No heroes yet. Create one in the Once Upon YOUR Child app first.", { narrate: false });
+      } else {
+        if (q.bedtime) {
+          await respond(token, `Snuggle in, ${q.hero.name}. Here comes a story.`,
+            () => callTool("tell_bedtime_story", { hero: q.hero.id, feeling: q.feeling, mood: q.mood, theme: q.theme }),
+            (r) => ({ text: textOf(r), narrate: !r.isError }));
+        } else {
+          await respond(token, `Once upon a time… let me think of a story for ${q.hero.name}.`,
+            () => callTool("start_adventure", { hero: q.hero.id, theme: q.theme, feeling: q.feeling }), onAdventure);
+        }
+      }
+    }
+  } catch (e) {
+    if (e instanceof KeyError) { askForKey(e.message); }
+    else { setAlert(e.message); addTurn("tool", e.message, { error: true }); }
+  } finally {
+    setBusy(false);
+    finishSpeaking(token);
+  }
+}
+
+/** Say the bridge line while the tool runs, then say the result. */
+async function respond(token, bridge, work, onResult) {
+  addTurn("alexa", bridge);
+  setStatus("Speaking", "speaking");
+  const bridging = speakBrowser(bridge, token);
+  setHint("Thinking…");
+  const r = await work();
+  await bridging;
+  if (token.cancelled) return;
+  const out = onResult(r);
+  await replyWith(token, out.text, { narrate: out.narrate, choices: out.choices });
+}
+
+async function replyWith(token, text, { narrate = true, choices = [] } = {}) {
+  addTurn("alexa", text);
+  if (choices.length) addChoices(choices);
+  setHint("");
+  await speak(text, token, { narrate });
+}
+async function reply(text, opts) {
+  const token = newToken();
+  try { await replyWith(token, text, opts); } finally { finishSpeaking(token); }
+}
+
+function onAdventure(r) {
+  if (r.isError) { state.storyId = null; state.choices = []; return { text: textOf(r), narrate: false }; }
+  const s = r.structuredContent ?? {};
+  state.storyId = s.is_ending ? null : s.story_id;
+  state.choices = s.is_ending ? [] : s.choices ?? [];
+  return { text: s.speech ?? textOf(r), narrate: true, choices: state.choices };
+}
+
+const listOf = (names) => names.length < 2 ? names.join("") : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
+
+/* ---------- heroes ---------- */
+function parseHeroes(text) {
+  // list_heroes returns lines like "- Maya, age 6, explorer, 1 buddy (id abc123)".
+  const out = [];
+  for (const m of text.matchAll(/^- (.+?) \(id ([^)]+)\)$/gm)) {
+    const name = m[1].split(",")[0].trim();
+    const age = /\bage (\d+)/.exec(m[1])?.[1];
+    out.push({ name, age: age ? Number(age) : null, id: m[2] });
+  }
+  return out;
+}
+function selectHero(h) {
+  state.hero = h;
+  for (const b of els.heroes.querySelectorAll("button")) b.setAttribute("aria-pressed", String(b.dataset.id === h.id));
+  renderExamples();
+}
+function renderHeroes() {
+  els.heroes.querySelectorAll("button").forEach((b) => b.remove());
+  for (const h of state.heroes) {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "chip"; b.dataset.id = h.id;
+    b.textContent = h.age ? `${h.name} (${h.age})` : h.name;
+    b.setAttribute("aria-pressed", "false");
+    b.addEventListener("click", () => { selectHero(h); setHint(idleHint()); els.input.focus(); });
+    els.heroes.append(b);
+  }
+  els.heroes.hidden = state.heroes.length === 0;
+}
+function renderExamples() {
+  const h = state.hero?.name ?? state.heroes[0]?.name ?? "Maya";
+  const examples = [`Tell ${h} a story about dragons`, `${h} is worried about the first day of school. Can we have a bedtime story?`, "Who are my heroes?"];
+  els.examples.querySelectorAll("button").forEach((b) => b.remove());
+  for (const ex of examples) {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "chip"; b.textContent = ex;
+    b.addEventListener("click", () => { if (!els.send.disabled) handleUtterance(ex); });
+    els.examples.append(b);
+  }
+  els.examples.hidden = false;
+}
+
+/* ---------- connect ---------- */
+async function connect() {
+  setBusy(true); setStatus("Connecting", "idle"); setHint("Connecting to the MCP server…");
+  try {
+    const init = await rpc("initialize", { protocolVersion: PROTOCOL, capabilities: {}, clientInfo: { name: "alexa-plus-simulated", version: "0.1.0" } });
+    await notify("notifications/initialized");
+    const { tools } = await rpc("tools/list");
+    const card = addTurn("tool", `connected to ${init.serverInfo?.name} v${init.serverInfo?.version} · protocol ${init.protocolVersion} · tools: ${tools.map((t) => t.name).join(", ")}`);
+    if (init.instructions) {
+      const d = document.createElement("details");
+      const s = document.createElement("summary"); s.textContent = "what the server tells its host";
+      d.append(s, document.createTextNode(init.instructions));
+      card.append(document.createElement("br"), d);
+    }
+    const heroesResult = await callTool("list_heroes", {});
+    state.heroes = parseHeroes(textOf(heroesResult));
+    if (state.heroes.length) selectHero(state.heroes[0]);
+    renderHeroes(); renderExamples();
+    setStatus("Ready", "idle"); setHint(idleHint());
+    setBusy(false);
+    if (!Recognition) setAlert("This browser has no speech recognition (try Chrome or Edge); type instead.");
+  } catch (e) {
+    if (e instanceof KeyError) { askForKey(e.message); }
+    else { setStatus("Not connected", "idle"); setAlert(`Could not connect: ${e.message}`); }
+  }
+}
+
+/* ---------- wiring ---------- */
+els.mic.addEventListener("click", () => { if (state.recognizer) stopListening(); else startListening(); });
+els.form.addEventListener("submit", (ev) => { ev.preventDefault(); handleUtterance(els.input.value.trim()); });
+els.changeKey.addEventListener("click", () => askForKey());
+els.keyForm.addEventListener("submit", () => {
+  state.key = els.keyInput.value.trim();
+  saveKey(state.key);
+  connect();
+});
+els.keyDialog.addEventListener("cancel", (ev) => { if (state.key === null) ev.preventDefault(); });
+
+state.key = loadKey();
+if (state.key === null) askForKey();
+else connect();
+</script>
+</body>
+</html>

@@ -6,9 +6,10 @@
  */
 import "dotenv/config";
 import { timingSafeEqual } from "node:crypto";
+import { fileURLToPath } from "node:url";
 import { createMcpExpressApp } from "@modelcontextprotocol/sdk/server/express.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import type { Request, Response } from "express";
+import express, { type Request, type Response } from "express";
 import { OuycClient } from "./ouyc-client.js";
 import { buildServer } from "./server.js";
 
@@ -48,6 +49,10 @@ const client = new OuycClient({
 });
 
 const app = createMcpExpressApp({ host: HOST });
+
+// The simulated Alexa+ page: a browser-side MCP client that drives the same
+// POST /mcp, so the demo exercises exactly what a voice host would.
+app.use(express.static(fileURLToPath(new URL("../web/", import.meta.url)), { index: "index.html" }));
 
 app.get("/healthz", (_req: Request, res: Response) => {
   res.json({ ok: true, name: "once-upon-your-child-mcp", apiBase: API_BASE });
