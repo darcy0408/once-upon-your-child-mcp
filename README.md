@@ -52,7 +52,9 @@ npx tsx scripts/personas.ts       # live: one hero per age band through the serv
 
 Production: `npm run build && npm start`. Railway and similar hosts set `PORT`.
 
-Auth: backend access tokens live about an hour, so the server keeps itself signed in with the refresh token and, failing that, re-mints the anonymous session by `OUYC_CLIENT_ID`. Set the client id and the server survives restarts and token expiry on its own.
+Locking the endpoint: set `MCP_SHARED_SECRET` and every `POST /mcp` must carry `Authorization: Bearer <that secret>`; anything else gets a 401. It is optional on your own machine, but the server refuses to start without it on Railway (or with `NODE_ENV=production`), because whoever reaches an open endpoint becomes the demo parent. The check scripts read the same variable from `.env` and send the header themselves. `GET /healthz` stays public.
+
+Auth to the app: backend access tokens live about an hour, so the server keeps itself signed in with the refresh token and, failing that, re-mints the anonymous session by `OUYC_CLIENT_ID`. Set the client id and the server survives restarts and token expiry on its own.
 
 ## How it talks to the app
 

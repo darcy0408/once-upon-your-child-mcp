@@ -12,7 +12,7 @@
  */
 import "dotenv/config";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import { mcpTransport, mcpUrl } from "./mcp-transport.js";
 
 const API = (process.env.OUYC_API_BASE ?? "https://story-weaver-app-production.up.railway.app").replace(/\/+$/, "");
 // Access tokens live an hour, so sign in fresh by client id when we can.
@@ -31,7 +31,7 @@ async function freshToken(): Promise<string> {
   throw new Error("Set OUYC_CLIENT_ID (or OUYC_TOKEN) in .env");
 }
 const TOKEN = await freshToken();
-const url = new URL(process.env.MCP_URL ?? `http://127.0.0.1:${process.env.PORT ?? 3333}/mcp`);
+const url = mcpUrl();
 
 type Persona = {
   name: string;
@@ -136,7 +136,7 @@ function stats(text: string) {
 
 type ToolResult = { isError?: boolean; content: { type: string; text?: string }[]; structuredContent?: any };
 const client = new Client({ name: "personas", version: "0.0.1" });
-await client.connect(new StreamableHTTPClientTransport(url));
+await client.connect(mcpTransport(url));
 
 async function tool(name: string, args: Record<string, unknown>): Promise<{ r: ToolResult; text: string; secs: string }> {
   const t0 = Date.now();

@@ -6,12 +6,12 @@
  *   npm run smoke          # in another
  */
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import { mcpTransport, mcpUrl } from "./mcp-transport.js";
 
-const url = new URL(process.env.MCP_URL ?? `http://127.0.0.1:${process.env.PORT ?? 3333}/mcp`);
+const url = mcpUrl();
 
 const client = new Client({ name: "smoke", version: "0.0.1" });
-const transport = new StreamableHTTPClientTransport(url);
+const transport = mcpTransport(url);
 await client.connect(transport);
 
 const { tools } = await client.listTools();

@@ -7,16 +7,16 @@
  *   npx tsx scripts/live.ts
  */
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import { mcpTransport, mcpUrl } from "./mcp-transport.js";
 
-const url = new URL(process.env.MCP_URL ?? `http://127.0.0.1:${process.env.PORT ?? 3333}/mcp`);
+const url = mcpUrl();
 const MAX_TURNS = Number(process.env.LIVE_TURNS ?? 2);
 const HERO = process.env.LIVE_HERO ?? "Maya";
 
 type ToolResult = { isError?: boolean; content: { type: string; text?: string; data?: string }[]; structuredContent?: any };
 
 const client = new Client({ name: "live", version: "0.0.1" });
-await client.connect(new StreamableHTTPClientTransport(url));
+await client.connect(mcpTransport(url));
 
 async function tool(name: string, args: Record<string, unknown>): Promise<ToolResult> {
   const t0 = Date.now();
