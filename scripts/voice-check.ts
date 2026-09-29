@@ -4,7 +4,7 @@
  *
  *   npx tsx scripts/voice-check.ts
  */
-import { choicesForSpeech, endingLine, resolveChoice, sceneBody, shortLabel, speakableError, toSpeech } from "../src/voice.js";
+import { choicesForSpeech, endingLine, isRetryable, resolveChoice, sceneBody, shortLabel, speakableError, toSpeech } from "../src/voice.js";
 
 let failures = 0;
 function expect(name: string, got: unknown, want: unknown) {
@@ -180,6 +180,14 @@ expect(
   speakableError(429, "5 per 1 minute", "Maya"),
   "The story needs a quick breath. Let's try again in a moment.",
 );
+
+// A host keeps the story open only when repeating the request can work.
+expect("rate-limit 429 is retryable", isRetryable(429, "5 per 1 minute"), true);
+expect("quota 429 is not retryable", isRetryable(429, "Daily story limit reached", "QUOTA_EXCEEDED"), false);
+expect("TTS quota is not retryable", isRetryable(429, "TTS limit", "TTS_QUOTA_EXCEEDED"), false);
+expect("502 is retryable", isRetryable(502, "Bad Gateway"), true);
+expect("timeout is retryable", isRetryable(undefined, "Request timed out after 60s"), true);
+expect("404 is not retryable", isRetryable(404, "Story not found"), false);
 
 console.log(failures ? `\n${failures} failing` : "\nall passed");
 process.exit(failures ? 1 : 0);

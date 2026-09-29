@@ -278,3 +278,15 @@ export function speakableError(status: number | undefined, message: string, hero
   if (status && status >= 500) return "The storybook is having trouble right now. Let's try again in a moment.";
   return message;
 }
+
+/**
+ * True when the same request can simply be repeated in a moment: the per-minute
+ * rate limit, a backend hiccup, or a timeout. A spent quota, a bad token or a
+ * missing story are not retryable. Hosts use this to keep an open story open
+ * instead of dropping it after a stall.
+ */
+export function isRetryable(status: number | undefined, message: string, code?: string): boolean {
+  if (status === 429) return !(code && /QUOTA/i.test(code));
+  if (status && status >= 500) return true;
+  return /timed out/i.test(message);
+}

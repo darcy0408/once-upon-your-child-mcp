@@ -239,6 +239,7 @@ const state = {
   hero: null,          // currently selected hero
   storyId: null,       // open Pick-a-Path story
   choices: [],         // { number, id, text } for the open story
+  lastTurnAt: 0,       // when the last choose_path was sent (rate-limit pacing)
   speaking: null,      // cancellation token for whatever is being spoken
   recognizer: null,
 };
@@ -502,7 +503,7 @@ async function handleUtterance(text) {
   const token = newToken();
   try {
     if (state.storyId) {
-      await respond(token, pick(BRIDGES), () => callTool("choose_path", { story_id: state.storyId, choice: text }), onAdventure);
+      await respond(token, pick(BRIDGES), () => pacedTurn(() => callTool("choose_path", { story_id: state.storyId, choice: text })), onAdventure);
     } else if (/\bheroes?\b|\bwho can\b|\bwhich (?:hero|kid|child)/.test(lower)) {
       await respond(token, "Let me check.", () => callTool("list_heroes", {}), (r) => {
         const names = state.heroes.map((h) => h.name);
@@ -556,8 +557,26 @@ async function reply(text, opts) {
   try { await replyWith(token, text, opts); } finally { finishSpeaking(token); }
 }
 
+/**
+ * The backend allows 5 continuations a minute per account (OUYC PR #72), and
+ * every judge shares one account. Space this page's turns at least TURN_GAP
+ * apart; narration usually takes longer than that anyway, so the wait rarely shows.
+ */
+const TURN_GAP_MS = 12_500;
+async function pacedTurn(work) {
+  const wait = state.lastTurnAt + TURN_GAP_MS - Date.now();
+  if (wait > 0) { setHint("Taking a breath…"); await new Promise((r) => setTimeout(r, wait)); }
+  state.lastTurnAt = Date.now();
+  return work();
+}
+
 function onAdventure(r) {
-  if (r.isError) { state.storyId = null; state.choices = []; return { text: textOf(r), narrate: false }; }
+  if (r.isError) {
+    // A rate-limit stall or backend hiccup keeps the story open so "try again in a
+    // moment" is actually possible; a spent quota or a lost story ends it.
+    if (!r._meta?.ouyc?.retryable) { state.storyId = null; state.choices = []; }
+    return { text: textOf(r), narrate: false, choices: state.choices };
+  }
   const s = r.structuredContent ?? {};
   state.storyId = s.is_ending ? null : s.story_id;
   state.choices = s.is_ending ? [] : s.choices ?? [];

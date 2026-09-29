@@ -14,6 +14,7 @@ import {
   ageBand,
   choicesForSpeech,
   endingLine,
+  isRetryable,
   resolveChoice,
   sceneBody,
   segmentForSpeech,
@@ -43,14 +44,24 @@ function heroSummary(h: Hero): string {
 /** Errors are spoken too, so keep them gentle and short. */
 function fail(err: unknown, heroName?: string) {
   let text: string;
+  let status: number | undefined;
+  let code: string | undefined;
+  const message = err instanceof Error ? err.message : String(err);
   if (err instanceof OuycError) {
-    text = speakableError(err.status, err.message, heroName, err.code);
+    status = err.status;
+    code = err.code;
+    text = speakableError(status, message, heroName, code);
   } else if (err instanceof Error) {
-    text = speakableError(undefined, err.message, heroName);
+    text = speakableError(undefined, message, heroName);
   } else {
-    text = String(err);
+    text = message;
   }
-  return { isError: true as const, content: [{ type: "text" as const, text }] };
+  // _meta, not structuredContent: error results must not be held to the tool's outputSchema.
+  return {
+    isError: true as const,
+    content: [{ type: "text" as const, text }],
+    _meta: { ouyc: { status, code, retryable: isRetryable(status, message, code) } },
+  };
 }
 
 /** Younger children get a shorter path by default; the app's bands do the same. */
