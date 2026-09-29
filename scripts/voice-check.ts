@@ -151,6 +151,19 @@ expect(
   sceneBody("Pip snuffles the egg (action). Pip barks a bright tune (dialogue). Pip nudges your hand (bond)."),
   "Pip snuffles the egg. Pip barks a bright tune. Pip nudges your hand.",
 );
+// Combined labels seen live on 2026-09-28 (Maya, "Under the sea").
+expect(
+  "strip '(dialogue/action)'",
+  sceneBody("His bark makes tiny bell-sounds that answer the lantern's hum (dialogue/action)."),
+  "His bark makes tiny bell-sounds that answer the lantern's hum.",
+);
+expect(
+  "strip '(action, bond)'",
+  sceneBody("He presses his silvery head against the glowing shell to warm it (action, bond)."),
+  "He presses his silvery head against the glowing shell to warm it.",
+);
+expect("strip '(action and dialogue)'", sceneBody("Pip wags (action and dialogue)."), "Pip wags.");
+expect("keep a label word mixed with others", toSpeech("She hugged it (comfort blanket)."), "She hugged it (comfort blanket).");
 expect("keep real parentheticals", sceneBody("The map (the one from Grandma) glows."), "The map (the one from Grandma) glows.");
 // Bedtime stories gloss new words in parentheses on purpose.
 expect("keep vocabulary glosses", toSpeech("The pebble was luminescent (glowing), soft (velvety)."), "The pebble was luminescent (glowing), soft (velvety).");
