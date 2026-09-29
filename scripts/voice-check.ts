@@ -4,7 +4,7 @@
  *
  *   npx tsx scripts/voice-check.ts
  */
-import { choicesForSpeech, endingLine, resolveChoice, sceneBody, shortLabel, toSpeech } from "../src/voice.js";
+import { choicesForSpeech, endingLine, resolveChoice, sceneBody, shortLabel, speakableError, toSpeech } from "../src/voice.js";
 
 let failures = 0;
 function expect(name: string, got: unknown, want: unknown) {
@@ -147,6 +147,19 @@ expect(
 expect("keep real parentheticals", sceneBody("The map (the one from Grandma) glows."), "The map (the one from Grandma) glows.");
 // Bedtime stories gloss new words in parentheses on purpose.
 expect("keep vocabulary glosses", toSpeech("The pebble was luminescent (glowing), soft (velvety)."), "The pebble was luminescent (glowing), soft (velvety).");
+
+// Since OUYC PR #72 the per-minute limit is per account, so judges sharing the
+// demo account can trip it mid-story. That must not sound like "come back tomorrow".
+expect(
+  "quota 429 means tomorrow",
+  speakableError(429, "Daily story limit reached", "Maya", "QUOTA_EXCEEDED"),
+  "Maya's storybook is resting for tonight. We can start a new story tomorrow.",
+);
+expect(
+  "rate-limit 429 means try again",
+  speakableError(429, "5 per 1 minute", "Maya"),
+  "The story needs a quick breath. Let's try again in a moment.",
+);
 
 console.log(failures ? `\n${failures} failing` : "\nall passed");
 process.exit(failures ? 1 : 0);

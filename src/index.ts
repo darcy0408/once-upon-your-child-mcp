@@ -29,14 +29,25 @@ if (PUBLIC && !SHARED_SECRET) {
   process.exit(1);
 }
 
-/** True when the request carries `Authorization: Bearer <MCP_SHARED_SECRET>` (or no secret is configured). */
+/** Constant-time comparison against MCP_SHARED_SECRET. */
+function matchesSecret(given: string): boolean {
+  const a = Buffer.from(given);
+  const b = Buffer.from(SHARED_SECRET);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
+/**
+ * True when the request carries `Authorization: Bearer <MCP_SHARED_SECRET>`,
+ * or the secret as the last path segment (`/mcp/<secret>`) for hosts whose
+ * connector UI takes only a URL and cannot send headers. Always true when no
+ * secret is configured.
+ */
 function authorized(req: Request): boolean {
   if (!SHARED_SECRET) return true;
+  const pathKey = req.params.key;
+  if (typeof pathKey === "string" && pathKey) return matchesSecret(pathKey);
   const match = /^Bearer\s+(\S+)$/i.exec(req.header("authorization")?.trim() ?? "");
-  if (!match) return false;
-  const given = Buffer.from(match[1]);
-  const want = Buffer.from(SHARED_SECRET);
-  return given.length === want.length && timingSafeEqual(given, want);
+  return Boolean(match) && matchesSecret(match![1]);
 }
 
 const client = new OuycClient({
@@ -58,14 +69,15 @@ app.get("/healthz", (_req: Request, res: Response) => {
   res.json({ ok: true, name: "once-upon-your-child-mcp", apiBase: API_BASE });
 });
 
-app.post("/mcp", async (req: Request, res: Response) => {
+// `/mcp/:key` is the header-less form of the same endpoint (see authorized()).
+app.post(["/mcp", "/mcp/:key"], async (req: Request, res: Response) => {
   if (!authorized(req)) {
     res
       .status(401)
       .set("WWW-Authenticate", 'Bearer realm="mcp"')
       .json({
         jsonrpc: "2.0",
-        error: { code: -32001, message: "Unauthorized. Send Authorization: Bearer <MCP_SHARED_SECRET>." },
+        error: { code: -32001, message: "Unauthorized. Send Authorization: Bearer <MCP_SHARED_SECRET>, or use /mcp/<MCP_SHARED_SECRET>." },
         id: null,
       });
     return;
@@ -98,8 +110,8 @@ const reject = (_req: Request, res: Response) => {
     id: null,
   });
 };
-app.get("/mcp", reject);
-app.delete("/mcp", reject);
+app.get(["/mcp", "/mcp/:key"], reject);
+app.delete(["/mcp", "/mcp/:key"], reject);
 
 app.listen(PORT, HOST, () => {
   console.log(`[mcp] once-upon-your-child listening on http://${HOST}:${PORT}/mcp`);

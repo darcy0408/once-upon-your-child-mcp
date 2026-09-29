@@ -44,7 +44,7 @@ function heroSummary(h: Hero): string {
 function fail(err: unknown, heroName?: string) {
   let text: string;
   if (err instanceof OuycError) {
-    text = speakableError(err.status, err.message, heroName);
+    text = speakableError(err.status, err.message, heroName, err.code);
   } else if (err instanceof Error) {
     text = speakableError(undefined, err.message, heroName);
   } else {

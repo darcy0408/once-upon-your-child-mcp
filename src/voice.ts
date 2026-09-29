@@ -230,11 +230,23 @@ function overlap(a: string, b: string): number {
   return hit / Math.min(ta.size, tb.size);
 }
 
-/** Turn a backend failure into one gentle sentence a host can say out loud. */
-export function speakableError(status: number | undefined, message: string, heroName?: string): string {
+/**
+ * Turn a backend failure into one gentle sentence a host can say out loud.
+ * A 429 means two different things: a spent story quota (code QUOTA_EXCEEDED,
+ * done for the day) or the per-minute rate limit, which is per account since
+ * OUYC PR #72 and clears in seconds. Only the first means "tomorrow". The
+ * /QUOTA/ test also catches TTS_QUOTA_EXCEEDED and ILLUSTRATION_QUOTA_EXCEEDED
+ * on purpose: those are daily caps too. The fallback line stays tool-neutral
+ * because other 429s (e.g. the model provider's own quota on bedtime stories,
+ * which has no code) reach tools with no choice pending.
+ */
+export function speakableError(status: number | undefined, message: string, heroName?: string, code?: string): string {
   const who = heroName ? `${heroName}'s` : "the";
-  if (status === 429) {
+  if (status === 429 && code && /QUOTA/i.test(code)) {
     return `${heroName ? heroName + "'s" : "The"} storybook is resting for tonight. We can start a new story tomorrow.`;
+  }
+  if (status === 429) {
+    return "The story needs a quick breath. Let's try again in a moment.";
   }
   if (status === 401 || status === 403) {
     return `I can't open ${who} storybook right now. Please check the Once Upon YOUR Child app.`;
