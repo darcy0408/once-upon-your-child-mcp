@@ -113,6 +113,20 @@ export function sceneBody(content: string, choices: Choice[] = []): string {
   return text;
 }
 
+// A label must not end on one of these: "Dive toward the light to search for"
+// (live, Explorer) is the word cap landing mid-phrase.
+const DANGLING =
+  /^(?:a|an|the|to|for|of|in|into|on|onto|at|with|from|by|toward|towards|under|over|through|up|down|out|off|and|or|but|so|as|if|that|which|who|where|when|is|are|was|be|it|its|your|his|her|their|very|more|than|about|like|then)$/i;
+
+/** Drop trailing function words left by a hard cut, keeping at least three words. */
+function trimDangling(words: string[]): string[] {
+  const out = [...words];
+  while (out.length > 3 && DANGLING.test(out[out.length - 1])) out.pop();
+  // "...the glowing light to search" is a bare infinitive left by the cut.
+  if (out.length > 4 && /^to$/i.test(out[out.length - 2])) out.splice(-2);
+  return out;
+}
+
 /** "Swim toward the coral path glowing silver and listen closely." -> short clause */
 export function shortLabel(text: string, maxWords: number): string {
   let s = toSpeech(text).replace(/[.!?\s]+$/, "");
@@ -128,7 +142,7 @@ export function shortLabel(text: string, maxWords: number): string {
     if (s.split(/\s+/).length <= maxWords) return s;
   }
   if (words.length <= maxWords) return words.join(" ");
-  return words.slice(0, maxWords).join(" ");
+  return trimDangling(words.slice(0, maxWords)).join(" ");
 }
 
 const LABEL_WORDS: Record<Band, number> = {

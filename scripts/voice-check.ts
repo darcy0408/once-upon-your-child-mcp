@@ -94,6 +94,13 @@ expect(
   "Follow the glowing footprints down the alley",
 );
 expect("short label untouched", shortLabel("Lift the tiny star.", 6), "Lift the tiny star");
+// The word cap landing mid-phrase (live, Explorer, 2026-09-26): never end on "to search for".
+expect(
+  "hard cut backs off dangling words",
+  shortLabel("Dive deeper toward the glowing light to search for the missing shell", 9),
+  "Dive deeper toward the glowing light",
+);
+expect("hard cut keeps a clean ending", shortLabel("Follow the fish past the reef into the dark cave beyond", 9), "Follow the fish past the reef into the dark");
 
 // Age-banded question.
 const two = [
