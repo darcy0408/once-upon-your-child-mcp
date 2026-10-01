@@ -121,6 +121,11 @@ for (const p of PERSONAS) {
   await api("/create-character", { method: "POST", body: JSON.stringify({ name: p.name, age: p.age, ...p.hero }) });
   console.log(`created hero ${p.name} (${p.age})`);
 }
+// Seeding a fresh demo account: stop before the walkthrough spends its story quota.
+if (process.env.PERSONAS_SETUP_ONLY === "1") {
+  console.log("heroes ready; PERSONAS_SETUP_ONLY=1 so no stories were run");
+  process.exit(0);
+}
 
 // ── stats ──────────────────────────────────────────────────────────────
 function stats(text: string) {
