@@ -100,7 +100,19 @@ expect(
   shortLabel("Dive deeper toward the glowing light to search for the missing shell", 9),
   "Dive deeper toward the glowing light",
 );
-expect("hard cut keeps a clean ending", shortLabel("Follow the fish past the reef into the dark cave beyond", 9), "Follow the fish past the reef into the dark");
+expect("hard cut never ends on an adjective", shortLabel("Follow the fish past the reef into the dark cave beyond", 9), "Follow the fish past the reef");
+// Cuts that landed mid-phrase live on 2026-10-05 (Maya "sea", Eli "lighthouse").
+expect(
+  "hard cut backs off 'for the hidden'",
+  shortLabel("Slip under the dock to listen for the hidden middle note of the sea song", 9),
+  "Slip under the dock",
+);
+expect(
+  "hard cut backs off 'where the humming'",
+  shortLabel("Circle the base of the cliff to look for hidden doors or vents where the humming might be coming from", 16),
+  "Circle the base of the cliff to look for hidden doors or vents",
+);
+expect("sprout hard cut stays whole", shortLabel("Open the blue leaf to peek inside", 6), "Open the blue leaf");
 
 // Age-banded question.
 const two = [
@@ -163,6 +175,23 @@ expect(
   "He presses his silvery head against the glowing shell to warm it.",
 );
 expect("strip '(action and dialogue)'", sceneBody("Pip wags (action and dialogue)."), "Pip wags.");
+// Dash-delimited labels, read aloud by the narrator live on 2026-10-04 (Maya, "sea").
+expect(
+  "strip '— action —' mid-sentence",
+  sceneBody("Pip dives a paw, splashing sparkling drops — action — and presses the bright pebble into your hand."),
+  "Pip dives a paw, splashing sparkling drops, and presses the bright pebble into your hand.",
+);
+expect(
+  "strip '— dialogue —' before a new sentence",
+  sceneBody('"Find it!" he yips — dialogue — He nudges your palm toward a curled shell.'),
+  '"Find it!" he yips. He nudges your palm toward a curled shell.',
+);
+expect(
+  "strip unspaced '—action—', '—dialogue—', '—help.' and '—bond.'",
+  sceneBody('Pip leaps and tugs the ribbon on the scroll—action—yips, "Hold fast!"—dialogue—then presses his paws hard on the shell to keep it open—help. He licks your fingers, warm and steady—bond. A band of small lights wheels above.'),
+  'Pip leaps and tugs the ribbon on the scroll, yips, "Hold fast!" then presses his paws hard on the shell to keep it open. He licks your fingers, warm and steady. A band of small lights wheels above.',
+);
+expect("keep an ordinary dash aside", toSpeech("The bell-song — soft as wind chimes — floated up."), "The bell-song — soft as wind chimes — floated up.");
 expect("keep a label word mixed with others", toSpeech("She hugged it (comfort blanket)."), "She hugged it (comfort blanket).");
 expect("keep real parentheticals", sceneBody("The map (the one from Grandma) glows."), "The map (the one from Grandma) glows.");
 // Bedtime stories gloss new words in parentheses on purpose.

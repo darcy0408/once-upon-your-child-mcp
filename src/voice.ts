@@ -31,6 +31,17 @@ const STAGE_DIRECTION = new RegExp(
   "gi",
 );
 
+/** The same labels set off by dashes: "drops — action — and presses", "to keep it open—help." */
+const DASHED_STAGE = new RegExp(String.raw`\s*[—–]\s*${STAGE_WORD}\s*(?:[—–]\s*|(?=[.,;:!?]))`, "gi");
+function closeDashedStage(match: string, offset: number, whole: string): string {
+  if (!/[—–]\s*$/.test(match)) return ""; // the sentence's own punctuation follows
+  const prev = whole[offset - 1] ?? "";
+  const next = whole[offset + match.length] ?? "";
+  if (!next || next === "\n") return "";
+  if (/[.!?,;:"”’']/.test(prev)) return " ";
+  return /[A-Z]/.test(next) ? ". " : ", ";
+}
+
 export function toSpeech(text: string | null | undefined): string {
   if (!text) return "";
   return text
@@ -43,6 +54,7 @@ export function toSpeech(text: string | null | undefined): string {
     // purpose ("luminescent (gently glowing)") and that must stay. Labels
     // also come combined ("(dialogue/action)", "(action, bond)").
     .replace(STAGE_DIRECTION, "")
+    .replace(DASHED_STAGE, closeDashedStage)
     .replace(/[ \t]+/g, " ")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
@@ -135,6 +147,18 @@ function trimDangling(words: string[]): string[] {
   return out;
 }
 
+/**
+ * A hard cut usually lands mid-phrase ("...to listen for the hidden", live
+ * 2026-10-05), and there is no telling an adjective from a noun here, so end
+ * the label before the last function word instead.
+ */
+function backOffPhrase(words: string[]): string[] {
+  for (let i = words.length - 1; i >= 3; i--) {
+    if (DANGLING.test(words[i])) return words.slice(0, i);
+  }
+  return words;
+}
+
 /** "Swim toward the coral path glowing silver and listen closely." -> short clause */
 export function shortLabel(text: string, maxWords: number): string {
   let s = toSpeech(text).replace(/[.!?\s]+$/, "");
@@ -150,7 +174,7 @@ export function shortLabel(text: string, maxWords: number): string {
     if (s.split(/\s+/).length <= maxWords) return s;
   }
   if (words.length <= maxWords) return words.join(" ");
-  return trimDangling(words.slice(0, maxWords)).join(" ");
+  return trimDangling(backOffPhrase(words.slice(0, maxWords))).join(" ");
 }
 
 const LABEL_WORDS: Record<Band, number> = {
