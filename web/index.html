@@ -398,7 +398,10 @@ function playBase64(data, token) {
 /** App narrator: fetch chunk n+1 while chunk n plays. Falls back to the browser voice. */
 async function speakNarrated(text, token) {
   const parts = chunk(text);
-  const fetchPart = (p) => callTool("narrate", { text: p }, { quiet: true }).then((r) => {
+  // Younger listeners get a slower read (narrate accepts 0.7–1.2).
+  const age = state.hero?.age;
+  const speed = typeof age === "number" ? (age <= 5 ? 0.85 : age <= 8 ? 0.9 : undefined) : undefined;
+  const fetchPart = (p) => callTool("narrate", speed ? { text: p, speed } : { text: p }, { quiet: true }).then((r) => {
     if (r.isError) throw new Error(textOf(r));
     const a = r.content.find((c) => c.type === "audio");
     if (!a) throw new Error("no audio in narrate result");
@@ -436,17 +439,28 @@ const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 function startListening() {
   stopSpeaking();
   const rec = new Recognition();
-  rec.lang = "en-US"; rec.interimResults = true; rec.maxAlternatives = 1;
+  // Keep listening across the pauses a child (or a parent) takes mid-sentence;
+  // stop after a quiet stretch instead of at the first breath.
+  rec.lang = "en-US"; rec.interimResults = true; rec.maxAlternatives = 5; rec.continuous = true;
   state.recognizer = rec;
   els.mic.setAttribute("aria-pressed", "true");
   els.micLabel.textContent = "Listening… tap to stop";
   setStatus("Listening", "listening"); setAlert(""); setHint("");
-  let finalText = "";
+  const finals = []; // one list of alternatives per final phrase
+  let interim = "", quiet = null;
+  const quietFor = (ms) => { clearTimeout(quiet); quiet = setTimeout(() => rec.stop(), ms); };
+  quietFor(NO_SPEECH_MS);
   rec.onresult = (ev) => {
-    let interim = "";
-    for (const r of ev.results) (r.isFinal ? (finalText += r[0].transcript) : (interim += r[0].transcript));
-    setHint(`“${finalText || interim}”`);
+    interim = "";
+    finals.length = 0;
+    for (const r of ev.results) {
+      if (r.isFinal) finals.push([...r].map((a) => a.transcript.trim()).filter(Boolean));
+      else interim += r[0].transcript;
+    }
+    setHint(`“${[finals.map((f) => f[0]).join(" "), interim].filter(Boolean).join(" ")}”`);
+    quietFor(finals.length ? PAUSE_MS : NO_SPEECH_MS);
   };
+  const finalText = () => finals.map((alts) => bestAlternative(alts)).join(" ").trim();
   rec.onerror = (ev) => {
     const why = { "not-allowed": "The microphone is blocked for this page. Use the text box instead.",
                   "no-speech": "I didn't catch anything.",
@@ -455,16 +469,42 @@ function startListening() {
     setAlert(why);
   };
   rec.onend = () => {
+    clearTimeout(quiet);
     state.recognizer = null;
     els.mic.setAttribute("aria-pressed", "false");
     els.micLabel.textContent = "Tap to talk";
     setStatus("Ready", "idle");
-    if (finalText.trim()) handleUtterance(finalText.trim());
+    const text = finalText();
+    if (text) handleUtterance(text);
     else setHint(idleHint());
   };
   rec.start();
 }
 function stopListening() { state.recognizer?.stop(); }
+const PAUSE_MS = 2500;     // silence after the last phrase that ends a turn
+const NO_SPEECH_MS = 8000; // give up if nothing is heard at all
+
+/**
+ * The recognizer offers several guesses per phrase. While a story is open,
+ * prefer the guess that names one of the current choices ("reach into the
+ * water" over "reach into the Walter"); otherwise take its first guess.
+ */
+function bestAlternative(alts) {
+  if (alts.length < 2 || !state.choices.length) return alts[0] ?? "";
+  const score = (text) => Math.max(...state.choices.map((c) => overlap(text, c.text)));
+  let best = alts[0], bestScore = score(alts[0]);
+  for (const a of alts.slice(1)) { const s = score(a); if (s > bestScore + 0.01) { best = a; bestScore = s; } }
+  return bestScore >= 0.5 ? best : alts[0];
+}
+const STOP_WORDS = new Set(["the", "a", "an", "to", "and", "of", "go", "lets", "let's", "i", "want", "wanna", "we", "should", "can", "please", "um", "uh", "i'd", "like"]);
+function overlap(a, b) {
+  const words = (s) => new Set(s.toLowerCase().split(/[^\w']+/).filter((w) => w && !STOP_WORDS.has(w)));
+  const ta = words(a), tb = words(b);
+  if (!ta.size || !tb.size) return 0;
+  let hit = 0;
+  for (const w of ta) if (tb.has(w)) hit++;
+  return hit / Math.min(ta.size, tb.size);
+}
 
 /* ---------- the "Alexa+" part: pick a tool for what the child said ---------- */
 const FEELING_WORDS = "worried|scared|nervous|sad|excited|angry|mad|upset|shy|grumpy|frustrated|anxious|lonely|missing|afraid|tired|happy|sick";

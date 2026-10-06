@@ -203,8 +203,13 @@ export function choicesForSpeech(choices: Choice[], opts: SpeechOpts = {}): stri
   return `What should happen next? ${parts.join(". ")}. ${own}`;
 }
 
-export function segmentForSpeech(segment: Segment, opts: SpeechOpts = {}): string {
-  const head = segment.title ? `${toSpeech(segment.title)}.\n\n` : "";
+/**
+ * A scene as the host should read it. The title is for the opening scene
+ * only: the backend repeats it on every segment, and a listener who hears
+ * the title again takes it for a new story (live, 2026-10-06).
+ */
+export function segmentForSpeech(segment: Segment, opts: SpeechOpts = {}, { withTitle = true } = {}): string {
+  const head = withTitle && segment.title ? `${toSpeech(segment.title)}.\n\n` : "";
   return `${head}${sceneBody(segment.content, segment.choices)}\n\n${choicesForSpeech(segment.choices, opts)}`.trim();
 }
 

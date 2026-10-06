@@ -4,7 +4,7 @@
  *
  *   npx tsx scripts/voice-check.ts
  */
-import { choicesForSpeech, endingLine, isRetryable, resolveChoice, sceneBody, shortLabel, speakableError, toSpeech } from "../src/voice.js";
+import { choicesForSpeech, endingLine, isRetryable, resolveChoice, sceneBody, segmentForSpeech, shortLabel, speakableError, toSpeech } from "../src/voice.js";
 
 let failures = 0;
 function expect(name: string, got: unknown, want: unknown) {
@@ -134,6 +134,10 @@ expect(
   choicesForSpeech(two, { age: 10 }).endsWith("Or say your own idea."),
   true,
 );
+// The backend repeats the title on every segment; only the opening scene says it (live, 2026-10-06).
+const seg = { id: "s2", segment_number: 2, title: "The Night the Garden Whistled", content: "Maya, you bolt toward the beach.", choices: two };
+expect("opening scene says the title", segmentForSpeech(seg, { age: 6 }).startsWith("The Night the Garden Whistled.\n\n"), true);
+expect("continuation skips the title", segmentForSpeech(seg, { age: 6 }, { withTitle: false }).startsWith("Maya, you bolt"), true);
 expect("sprout ending", endingLine({ age: 4, heroName: "Theo" }), "The end. Sweet dreams, Theo.");
 expect("adventurer ending", endingLine({ age: 10, heroName: "Zara" }), "The end. Goodnight, Zara.");
 expect("creator ending", endingLine({ age: 13, heroName: "Eli" }), "The end.");

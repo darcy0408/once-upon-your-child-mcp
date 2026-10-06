@@ -215,9 +215,10 @@ export function buildServer(client: OuycClient): McpServer {
         const opts = { age: open.age, heroName: open.heroName };
         if (ended) openStories.delete(story_id);
         else openStories.set(story_id, { ...open, choices: seg.choices });
+        // No title on a continuation: hearing it again sounds like a new story.
         const body = ended
-          ? `${seg.title ? toSpeech(seg.title) + ".\n\n" : ""}${sceneBody(seg.content)}\n\n${endingLine(opts)}`
-          : segmentForSpeech(seg, opts);
+          ? `${sceneBody(seg.content)}\n\n${endingLine(opts)}`
+          : segmentForSpeech(seg, opts, { withTitle: false });
         const structured = {
           story_id,
           title: seg.title ? toSpeech(seg.title) : undefined,
