@@ -471,9 +471,12 @@ const FEELING_WORDS = "worried|scared|nervous|sad|excited|angry|mad|upset|shy|gr
 function parseRequest(u) {
   const lower = u.toLowerCase();
   const hero = state.heroes.find((h) => new RegExp(`\\b${h.name.toLowerCase()}\\b`).test(lower)) ?? state.hero;
-  const themeM = /\b(?:about|with)\s+(.+?)(?=\s+(?:and|because|who|that|tonight|please)\b|[.,!?]|$)/i.exec(u);
   const feelM = /\b(?:feeling|feels|felt)\s+([^.,!?]+)/i.exec(u)
     ?? new RegExp(`\\b(?:is|'s|'re|are|i'm|i am|am)\\s+((?:a (?:bit|little) )?(?:${FEELING_WORDS})[^.,!?]*)`, "i").exec(u);
+  // "Maya is nervous about her swim lesson. Tell her a story about the sea.": the
+  // feeling clause has its own "about", so look for the theme outside it.
+  const rest = feelM ? u.replace(feelM[0], " ") : u;
+  const themeM = /\b(?:about|with)\s+(.+?)(?=\s+(?:and|because|who|that|tonight|please)\b|[.,!?]|$)/i.exec(rest);
   const bedtime = /\bbedtime\b|\bwind[- ]?down\b|\bcalm(?:ing)?\b|\bsleep|\bgo to bed\b|\bgoodnight story\b/.test(lower);
   const mood = /funny|silly|giggl/.test(lower) ? "funny" : /\bbrave\b/.test(lower) ? "brave" : /friend/.test(lower) ? "friendship" : undefined;
   const clean = (s) => s?.trim().replace(/^(?:the|a|an)\s+/i, "").replace(/\s+story$/i, "");
