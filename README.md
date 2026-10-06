@@ -100,6 +100,7 @@ The server carries a bearer token for **one parent account**. It never bypasses 
 - 2026-09-24: scaffolded; tool surface and transport verified against the MCP SDK (protocol 2025-11-25).
 - 2026-09-25: full loop verified live against the production backend through the MCP server: `list_heroes`, a three-scene `start_adventure` / `choose_path` run answered with "two" and "the first one", a `tell_bedtime_story`, and `narrate` returning an MP3 audio block. See `scripts/live.ts`.
 - 2026-09-25: age-band walkthrough (`scripts/personas.ts`) with heroes aged 4, 6, 10 and 13. Added age-aware choice phrasing, clause-trimmed labels, echo/nudge stripping, spoken errors, refresh-token auth, and hero details on bedtime stories.
+- 2026-09-26 to 2026-10-06: shared secret on `POST /mcp` and the header-less `/mcp/<secret>` form, Railway config with `/healthz`, the simulated Alexa+ page (`web/index.html`) with voice in and out, quota-vs-rate-limit speech, and a rate-limit stall no longer losing the open story.
 
 Demo account setup is in `scripts/setup-parent.ts` (anonymous session, adult declared age, one hero).
 
