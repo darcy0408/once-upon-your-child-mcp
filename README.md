@@ -1,5 +1,7 @@
 # Once Upon YOUR Child — MCP server for Alexa+
 
+**Demo video (3 min):** https://youtu.be/jCIvdz7ySrQ — the deployed server driving a simulated Alexa+ page, entered as *Once Upon a Voice* in the Build, Ship, Shape hackathon.
+
 A self-hosted [Model Context Protocol](https://modelcontextprotocol.io) server that lets a voice agent such as **Alexa+** tell personalized, feelings-aware bedtime stories from [Once Upon YOUR Child](https://onceuponyourchild.app).
 
 The child already has heroes in the app: a name, an age, a comfort item, buddies, fears and strengths. This server exposes those heroes and the app's story engine as MCP tools, so a parent can say:
