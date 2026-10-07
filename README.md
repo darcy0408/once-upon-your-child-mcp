@@ -106,4 +106,5 @@ Demo account setup is in `scripts/setup-parent.ts` (anonymous session, adult dec
 
 ## License
 
-MIT
+MIT, for the code in this repository. The licence does not cover the Once Upon YOUR Child name, logo, or
+backend service, which are separate: this server is a client of that service and needs an account with it.
